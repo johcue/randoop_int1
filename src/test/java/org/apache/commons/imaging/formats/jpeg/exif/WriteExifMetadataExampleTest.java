@@ -1,0 +1,76 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.commons.imaging.formats.jpeg.exif;
+
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.io.File;
+import java.nio.file.Files;
+import java.util.stream.Stream;
+
+import org.apache.commons.imaging.ImagingOverflowException;
+import org.apache.commons.imaging.bytesource.ByteSource;
+import org.apache.commons.imaging.examples.WriteExifMetadataExample;
+import org.apache.commons.imaging.formats.jpeg.JpegImageParser;
+import org.apache.commons.imaging.formats.tiff.TiffField;
+import org.apache.commons.imaging.formats.tiff.TiffImageMetadata;
+import org.apache.commons.imaging.internal.Debug;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
+
+public class WriteExifMetadataExampleTest extends AbstractExifTest {
+
+    public static Stream<File> data() throws Exception {
+        return getJpegImages().stream();
+    }
+
+    /**
+     * Test that there are no odd offsets in the generated TIFF images.
+     *
+     * @throws Exception if the test failed for a unexpected reason
+     */
+    @ParameterizedTest
+    @MethodSource("data")
+    public void testOddOffsets(final File imageFile) throws Exception {
+        Debug.debug("imageFile", imageFile.getAbsoluteFile());
+
+        final File tempFile = Files.createTempFile("test", ".jpg").toFile();
+        Debug.debug("tempFile", tempFile.getAbsoluteFile());
+
+        try {
+            final boolean ignoreImageData = isPhilHarveyTestImage(imageFile);
+            if (ignoreImageData) {
+                return;
+            }
+            new WriteExifMetadataExample().changeExifMetadata(imageFile, tempFile);
+            final JpegImageParser parser = new JpegImageParser();
+            final ByteSource byteSource = ByteSource.file(tempFile);
+            final TiffImageMetadata tiff = parser.getExifMetadata(byteSource, null);
+            for (final TiffField tiffField : tiff.getAllFields()) {
+                if (!tiffField.isLocalValue()) {
+                    final boolean isOdd = (tiffField.getOffset() & 1L) == 0;
+                    assertTrue(isOdd);
+                }
+            }
+        } catch (final ImagingOverflowException e) {
+            Debug.debug("Ignoring unavoidable ExifOverflowException: " + e.getMessage());
+            Debug.debug("Error image: " + imageFile.getAbsoluteFile());
+        }
+    }
+
+}
